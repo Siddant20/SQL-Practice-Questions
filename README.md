@@ -9,16 +9,23 @@ The goal of this repository is to demonstrate proficiency in writing clean, read
 # sales Schema:
 
 -customers: Customer details and location information.
+
 -orders: Order dates, status, fulfillment stores, and sales staff IDs.
+
 -order_items: Order line items detailing product quantities, list prices, and discounts.
+
 -stores: Physical store location data.
+
 -staffs: Employee info, management relationships, and store assignments.
 
 # production Schema:
 
 -categories: Product category listings.
+
 -brands: Brand names and identifier data.
+
 -products: Master product table with pricing and relationships.
+
 -stocks: Real-time product inventory levels per store location.
 
 ## 💡 Key SQL Concepts & Patterns Covered
