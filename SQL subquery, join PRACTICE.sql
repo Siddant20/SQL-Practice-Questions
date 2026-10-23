@@ -139,4 +139,154 @@ ON pp.category_id = pc.category_id
 GROUP BY pc.category_id
 HAVING COUNT(pb.brand_id) > 3
 
+/*
+13. Staff vs. Manager Hierarchy: 
+Write a query using a self-join to display every staff 
+member's name along with their direct manager's name. Include staff who do not have a 
+manager.
+*/
+
+--join
+SELECT CONCAT(ss1.first_name, ' ', ss1.last_name) AS staff_name, CONCAT(ss2.first_name, ' ',ss2.last_name) AS manager_name
+FROM sales.staffs ss1
+LEFT JOIN sales.staffs ss2
+ON ss1.manager_id = ss2.staff_id;
+
+--subquery
+SELECT CONCAT(ss1.first_name, ' ', ss1.last_name) AS staff_name,
+(
+	SELECT	CONCAT(ss2.first_name, ' ', ss2.last_name) AS manager_name
+	FROM sales.staffs ss2
+	WHERE ss1.manager_id = ss2.staff_id
+) AS manager_name
+FROM sales.staffs ss1
+
+/*
+14. Dead Inventory Detection: 
+Identify brands that have products in the production.products 
+table but have never been sold in any order.
+*/
+
+SELECT pb.brand_name, COUNT(soi.order_id) AS total_orders FROM production.brands pb
+LEFT JOIN production.products pp
+ON pp.brand_id = pb.brand_id
+LEFT JOIN sales.order_items soi
+ON soi.product_id = pp.product_id
+GROUP BY pb.brand_name
+HAVING  COUNT(soi.order_id) = 0
+AND COUNT (pp.product_id) > 0 
+
+SELECT pb.brand_name
+FROM production.brands pb
+WHERE EXISTS
+(
+	SELECT 1 FROM production.products pp
+	WHERE pp.brand_id = pb.brand_id
+)
+AND NOT EXISTS
+(
+	SELECT 1 FROM production.products pp
+	JOIN sales.order_items soi
+	ON pp.product_id = soi.product_id
+)
+
+
+/*
+15. Store Performance Summary: 
+For each store, calculate the total number of orders 
+handled, total items sold, and total revenue generated.
+*/
+
+SELECT ss.store_name, 
+COUNT(distinct so.order_id) as total_orders,
+SUM(soi.quantity) as total_items,
+SUM(soi.list_price * soi.quantity* (1-soi.discount)) AS total_revenue
+FROM sales.stores ss
+JOIN sales.orders so
+ON so.store_id = ss.store_id
+JOIN sales.order_items soi
+ON so.order_id = soi.order_id
+GROUP BY ss.store_name
+
+/*
+16. Delayed Shipments Analysis: 
+Find orders that took longer to ship than expected 
+(shipped_date > required_date). Show the order details, the customer's email, and how 
+many days it was delayed.
+*/
+
+SELECT 
+so.order_id, 
+so.order_date,
+so.order_status,
+so.required_date,
+so.shipped_date,
+sc.email,
+DATEDIFF(DAY, required_date, shipped_date) AS delayed_days
+FROM sales.orders so
+JOIN sales.customers sc
+ON sc.customer_id = so.customer_id
+WHERE DATEDIFF(DAY, required_date, shipped_date) > 0
+ORDER BY delayed_days DESC;
+
+
+/*
+17. Most Popular Category per Store: 
+Write a query to find which product category has the 
+highest number of units sold for each individual store
+*/
+
+WITH store_category_sales AS (
+	SELECT 
+	ss.store_id,
+	ss.store_name,
+	pc.category_name,
+	SUM(soi.quantity) AS total_units
+	FROM production.categories pc
+	JOIN production.products pp
+	ON pc.category_id = pp.category_id
+	JOIN sales.order_items soi
+	ON soi.product_id= pp.product_id
+	JOIN sales.orders so
+	ON soi.order_id = so.order_id
+	JOIN sales.stores ss
+	ON ss.store_id = so.store_id
+	GROUP BY ss.store_id, ss.store_name, pc.category_name
+)
+SELECT * FROM
+	(SELECT store_id, store_name,category_name, total_units,
+	ROW_NUMBER() OVER(Partition BY store_id ORDER BY total_units DESC) AS rank_num
+	FROM store_category_sales) AS ranked_categories
+	WHERE rank_num = 1
+
+/*
+18. Stock Shortage Warning:
+Find products where the total stock across all stores is less than 
+the total quantity of that product ordered in the last 30 days of the data history.
+*/
+
+WITH 
+	total_stock AS (
+		SELECT ps.product_id, pp.product_name, SUM(quantity) AS total_stock
+		FROM production.stocks ps
+		JOIN production.products pp
+		ON ps.product_id = pp.product_id
+		GROUP BY ps.product_id, pp.product_name
+	),
+	recent_sales AS (
+		SELECT pp.product_id, pp.product_name, SUM(soi.quantity) As total_orders 
+		FROM sales.orders so
+		JOIN sales.order_items soi
+		ON soi.order_id = so.order_id
+		JOIN production.products pp
+		ON pp.product_id = soi.product_id
+		WHERE order_date >= DATEADD( DAY, -30, (SELECT MAX(order_date) FROM sales.orders))
+		GROUP BY pp.product_id, pp.product_name
+	)
+SELECT ts.product_id, ts.product_name, ts.total_stock, rs.total_orders
+FROM total_stock ts
+JOIN recent_sales rs
+ON ts.product_id = rs.product_id
+WHERE rs.total_orders > ts.total_stock
+
 
